@@ -53,7 +53,7 @@ func main() {
 func loadCities(jsonFile string) ([]City, error) {
 	data, err := os.ReadFile(jsonFile)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("read %s: %w", jsonFile, err)
 	}
 
 	var cities []City
@@ -70,12 +70,12 @@ func buildAuth(privateKeyHex string, chainID *big.Int) (*bind.TransactOpts, erro
 	privateKeyHex = strings.TrimPrefix(privateKeyHex, "0x")
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("parse private key: %w", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("build transactor: %w", err)
 	}
 
 	return auth, err
