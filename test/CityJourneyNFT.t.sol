@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract CityJourneyNFTTest is Test {
-
     using Strings for uint256;
 
     uint256 constant INITIAL_TOTAL_SUPPLY = 3;
@@ -27,7 +26,6 @@ contract CityJourneyNFTTest is Test {
     uint256 totalSupply;
     CityJourneyNFT nftCollection;
 
-
     function setUp() public {
         owner = makeAddr("owner");
         randomUser = makeAddr("randomUser");
@@ -40,7 +38,13 @@ contract CityJourneyNFTTest is Test {
         nftCollection.mint(TEST_CITY_NAME, TEST_LATITUDE, TEST_LONGITUDE, TEST_FROM_DATE, TEST_TO_DATE);
 
         assertEq(nftCollection.ownerOf(0), owner);
-        (string memory storedCityName_, int256 storedLatitude_, int256 storedLongitude_, uint256 storedFromDate_, uint256 storedToDate_) = nftCollection.cityData(0);
+        (
+            string memory storedCityName_,
+            int256 storedLatitude_,
+            int256 storedLongitude_,
+            uint256 storedFromDate_,
+            uint256 storedToDate_
+        ) = nftCollection.cityData(0);
         assertEq(storedCityName_, TEST_CITY_NAME);
         assertEq(storedLatitude_, TEST_LATITUDE);
         assertEq(storedLongitude_, TEST_LONGITUDE);
@@ -54,7 +58,7 @@ contract CityJourneyNFTTest is Test {
         int256 longitude2_ = 2;
         uint256 fromDate2_ = 1_600_000_000;
         uint256 toDate2_ = 1_630_000_000;
-        
+
         vm.startPrank(owner);
 
         nftCollection.mint(TEST_CITY_NAME, TEST_LATITUDE, TEST_LONGITUDE, TEST_FROM_DATE, TEST_TO_DATE);
@@ -62,16 +66,28 @@ contract CityJourneyNFTTest is Test {
 
         assertEq(nftCollection.ownerOf(0), owner);
         {
-            (string memory storedCityName_, int256 storedLatitude_, int256 storedLongitude_, uint256 storedFromDate_, uint256 storedToDate_) = nftCollection.cityData(0);
+            (
+                string memory storedCityName_,
+                int256 storedLatitude_,
+                int256 storedLongitude_,
+                uint256 storedFromDate_,
+                uint256 storedToDate_
+            ) = nftCollection.cityData(0);
             assertEq(storedCityName_, TEST_CITY_NAME);
             assertEq(storedLatitude_, TEST_LATITUDE);
             assertEq(storedLongitude_, TEST_LONGITUDE);
             assertEq(storedFromDate_, TEST_FROM_DATE);
             assertEq(storedToDate_, TEST_TO_DATE);
         }
-        
+
         {
-            (string memory storedCityName2_, int256 storedLatitude2_, int256 storedLongitude2_, uint256 storedFromDate2_, uint256 storedToDate2_) = nftCollection.cityData(1);
+            (
+                string memory storedCityName2_,
+                int256 storedLatitude2_,
+                int256 storedLongitude2_,
+                uint256 storedFromDate2_,
+                uint256 storedToDate2_
+            ) = nftCollection.cityData(1);
             assertEq(storedCityName2_, cityName2_);
             assertEq(storedLatitude2_, latitude2_);
             assertEq(storedLongitude2_, longitude2_);
@@ -84,10 +100,8 @@ contract CityJourneyNFTTest is Test {
 
     function test_RevertWhen_MintCallerNotOwner() public {
         vm.startPrank(randomUser);
-        
-        vm.expectRevert(
-            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, randomUser)
-        );
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, randomUser));
         nftCollection.mint(TEST_CITY_NAME, TEST_LATITUDE, TEST_LONGITUDE, TEST_FROM_DATE, TEST_TO_DATE);
 
         vm.stopPrank();
@@ -95,13 +109,13 @@ contract CityJourneyNFTTest is Test {
 
     function test_RevertWhen_MintSoldOut() public {
         vm.startPrank(owner);
-        for(uint256 i = 0; i < INITIAL_TOTAL_SUPPLY; i++) {
+        for (uint256 i = 0; i < INITIAL_TOTAL_SUPPLY; i++) {
             nftCollection.mint(TEST_CITY_NAME, TEST_LATITUDE, TEST_LONGITUDE, TEST_FROM_DATE, TEST_TO_DATE);
         }
 
         vm.expectRevert("Sold Out.");
         nftCollection.mint(TEST_CITY_NAME, TEST_LATITUDE, TEST_LONGITUDE, TEST_FROM_DATE, TEST_TO_DATE);
-        
+
         vm.stopPrank();
     }
 
@@ -113,7 +127,6 @@ contract CityJourneyNFTTest is Test {
 
         vm.expectRevert("Soulbound: non-transferable.");
         nftCollection.transferFrom(owner, randomUser, mintedTokenId_);
-
 
         vm.stopPrank();
     }
@@ -142,12 +155,12 @@ contract CityJourneyNFTTest is Test {
 
     function test_TokenURI() public {
         vm.startPrank(owner);
-        
+
         nftCollection.mint(TEST_CITY_NAME, TEST_LATITUDE, TEST_LONGITUDE, TEST_FROM_DATE, TEST_TO_DATE);
         uint256 mintedTokenId_ = nftCollection.currentTokenId() - 1;
         string memory tokenURI_ = nftCollection.tokenURI(mintedTokenId_);
         string memory expectedURI_ = string.concat(BASE_URI, mintedTokenId_.toString(), ".json");
-        
+
         assertEq(tokenURI_, expectedURI_);
 
         vm.stopPrank();
