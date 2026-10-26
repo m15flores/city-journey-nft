@@ -11,6 +11,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -102,7 +103,15 @@ func mintCities(client *ethclient.Client, contract *CityJourneyNFT, auth *bind.T
 			return err
 		}
 
-		fmt.Println("Minted:", city.CityName, "tx:", tx.Hash().Hex())
+		receipt, err := bind.WaitMined(context.Background(), client, tx)
+		if err != nil {
+			return fmt.Errorf("wait mint %s tx %s: %w", city.CityName, tx.Hash().Hex(), err)
+		}
+		if receipt.Status != types.ReceiptStatusSuccessful {
+			return fmt.Errorf("mint %s reverted: tx %s block %d", city.CityName, tx.Hash().Hex(), receipt.BlockNumber)
+		}
+
+		fmt.Println("Minted:", city.CityName, "tx:", tx.Hash().Hex(), "block:", receipt.BlockNumber)
 		nonce++
 	}
 	return nil
