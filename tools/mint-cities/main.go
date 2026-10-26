@@ -1,3 +1,7 @@
+// Command mint-cities reads cities from cities.json and mints one CityJourneyNFT
+// token per city on Arbitrum One, waiting for each transaction to be mined.
+//
+// The minting account's private key is read from the PRIVATE_KEY environment variable.
 package main
 
 import (
@@ -16,6 +20,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
+// City is one entry of cities.json; its fields are passed to CityJourneyNFT.Mint.
+// Latitude and Longitude are in degrees multiplied by 1e6; FromDate and ToDate are
+// Unix timestamps in seconds.
 type City struct {
 	CityName  string `json:"cityName"`
 	Latitude  int64  `json:"latitude"`
