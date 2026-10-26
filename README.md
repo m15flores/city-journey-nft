@@ -1,62 +1,125 @@
 # City Journey NFT
 
-Extended version of the ERC-721 exercise from the Blockchain Accelerator program (Module 2). A personal, soulbound NFT collection representing the cities I have lived in, deployed live on Arbitrum One.
+A soulbound ERC-721 collection with one token for each city I have lived in. The city name, coordinates and dates are stored on-chain, and a small Go tool mints the tokens from a JSON file. It is deployed on Arbitrum One and all 10 tokens are minted.
 
-Original exercise: https://github.com/m15flores/blockchain-accelerator-journal/tree/main/module-2/nft-collection
+Stack: Solidity 0.8.34, Foundry, OpenZeppelin Contracts 5.7.0, Go 1.25 with go-ethereum v1.17.6.
 
-## What changed vs. the original exercise
+**Not audited.**
 
-The original `BANFTCollection.sol` was a bare ERC-721 with sequential minting and no on-chain metadata beyond the token URI. This version adds:
+## Deployment
 
-- **On-chain `CityData` struct per token**: city name, latitude/longitude (scaled `int256`), and a from/to date range (Unix timestamps), verifiable directly on-chain without depending on IPFS staying available
-- **`Ownable` with mint restricted to the owner**. This collection tells one person's story; minting isn't open to the public
-- **A richer `MintNFT` event** including the city name, not just the token ID
-- **Soulbound (non-transferable) tokens**. Each piece represents a lived chapter, not a tradeable asset. Enforced via an override of `_update`, the single internal hook OpenZeppelin routes every transfer through
+- Network: Arbitrum One (42161)
+- `CityJourneyNFT`: `0xA066b02716BEFaAb59B370224Af1c8C0bBEA1eDd`
+- [Arbiscan](https://arbiscan.io/address/0xa066b02716befaab59b370224af1c8c0bbea1edd) · [Sourcify](https://repo.sourcify.dev/42161/0xA066b02716BEFaAb59B370224Af1c8C0bBEA1eDd) (exact match) · [OpenSea](https://opensea.io/collection/city-journey-nft)
 
-## Contract
+The verified source is tag [`v1.0.0`](https://github.com/m15flores/city-journey-nft/tree/v1.0.0). Since then `main` only has `forge fmt` formatting and NatSpec comments; the runtime bytecode, without the metadata hash, is the same.
 
-- Address: `0xA066b02716BEFaAb59B370224Af1c8C0bBEA1eDd` (Arbitrum One)
-- [Arbiscan](https://arbiscan.io/address/0xa066b02716befaab59b370224af1c8c0bbea1edd)
-- [View on OpenSea](https://opensea.io/fr/collection/city-journey-nft)
+## Contracts
 
-## Testing
+### CityJourneyNFT
 
-9 tests covering minting (with on-chain city data), soulbound transfer restrictions, and token URI resolution.
+[`src/CityJourneyNFT.sol`](src/CityJourneyNFT.sol) is an OpenZeppelin `ERC721` + `Ownable`. Each mint saves a `CityData` struct (name, latitude and longitude ×1e6, `fromDate` and `toDate` as Unix seconds) under the token id. Ids start at 0 and go up by one. `totalSupply` is the cap, not the minted count (that is `currentTokenId`). Metadata and images are on IPFS.
 
-​```bash
+| Function | Who | What it does |
+|---|---|---|
+| `mint(name, lat, lon, from, to)` | owner | Mints the next id to `msg.sender` and stores its `CityData`. Reverts with `OwnableUnauthorizedAccount` for anyone else and `"Sold Out."` once the cap is reached. |
+| `tokenURI(id)` | anyone | Returns `baseUri + id + ".json"`. Reverts with `ERC721NonexistentToken` if the id is not minted. |
+| `cityData(id)` | anyone | Returns the stored city data (zero values for an unminted id). |
+| `transferFrom`, `safeTransferFrom` | anyone | Revert with `"Soulbound: non-transferable."` for any minted token (`ERC721NonexistentToken` for an unminted id). |
+| `approve`, `setApprovalForAll` | holder | Succeed, but the approval can never be used. |
+| `transferOwnership`, `renounceOwnership` | owner | Inherited from `Ownable`. |
+
+Events: `MintNFT(userAddress_, tokenId_, cityName_)`, plus the standard `Transfer`, `Approval`, `ApprovalForAll` and `OwnershipTransferred`.
+
+### mint-cities (Go)
+
+[`tools/mint-cities`](tools/mint-cities/main.go) reads [`cities.json`](tools/mint-cities/cities.json) and calls `mint()` once per city through `abigen` bindings. It fetches the pending nonce once and increments it locally, waits for each receipt with `bind.WaitMined`, and stops with an error if a mint reverts.
+
+## How it works
+
+```mermaid
+flowchart TD
+    A[cities.json] --> B["mint-cities (Go)"]
+    B -- "mint(), one tx per city" --> C["CityJourneyNFT (Arbitrum One)<br/>cityData[id]: name, coords, dates<br/>token → owner (soulbound)"]
+    C -- "tokenURI(id)" --> D["ipfs://cid/id.json<br/>wallets, OpenSea"]
+    C -- "cityData(id)" --> E["city-journey-indexer<br/>Go HTTP API"]
+```
+
+[city-journey-indexer](https://github.com/m15flores/city-journey-indexer) is a Go backend that reads the city data straight from this contract and serves it over a small HTTP API.
+
+## Design decisions
+
+**Soulbound through `_update`.** In OpenZeppelin v5 every mint, transfer and burn goes through `_update`, so one check there (`from` must be `address(0)`) blocks all transfers. Overriding each transfer function separately could miss a path.
+
+**Fixed cap, no setter.** The collection is ten cities. With no function to raise `totalSupply`, the owner cannot quietly add more later.
+
+**City data on-chain, description off-chain.** Name, coordinates and dates stay readable even if the IPFS pin disappears, and the indexer reads them directly. The narrative text stays in the metadata JSON to avoid paying gas for long strings.
+
+**Owner-only mint.** It is one person's story; nobody else should be able to add cities.
+
+**Pinned pragma.** `pragma solidity 0.8.34` instead of `^0.8.x`, so the verified source always builds with the compiler that produced the deployed bytecode.
+
+**Manual nonce and receipt wait in Go.** Letting the binding resolve the nonce for each transaction gave "nonce too low" errors, because Arbitrum confirms fast enough for consecutive lookups to race. Checking each receipt makes a reverted mint stop the run instead of being reported as minted.
+
+## Known limitations
+
+Contract:
+- `approve` and `setApprovalForAll` still work, so a marketplace can show a listing that can never be filled.
+- No ERC-5192 `locked()`, so marketplaces cannot detect that the tokens are soulbound.
+- `mint` does not validate input: empty name, latitude/longitude out of range or `fromDate > toDate` are all accepted.
+- The current city uses `toDate = 0` in `cities.json` to mean "still here". The contract gives it no meaning.
+- `totalSupply` is the cap, not the minted count (unlike `ERC721Enumerable`).
+
+Mint script:
+- RPC URL, chain id and contract address are hardcoded.
+- Not idempotent: running it again mints duplicates until the cap is reached.
+- `WaitMined` has no timeout.
+
+Process:
+- Immutable contract, no upgrade path: a fix means a new deployment.
+- Not audited.
+
+## How to run
+
+Requires Foundry and Go 1.25+.
+
+```bash
+git clone --recursive https://github.com/m15flores/city-journey-nft.git
+cd city-journey-nft
+forge build
 forge test -vv
-​```
+forge coverage --no-match-coverage "(test|script)"
+```
 
-100% coverage (lines, statements, branches, functions) on the contract itself:
+Deploy (reads `PRIVATE_KEY` from the environment; name, symbol, cap and base URI are set in the script):
 
-​```bash
-forge coverage
-​```
+```bash
+forge script script/DeployCityJourneyNFTCollection.s.sol --rpc-url <RPC_URL> --broadcast
+```
 
-| File                    | % Lines         | % Statements    | % Branches    | % Funcs       |
-|-------------------------|------------------|------------------|----------------|----------------|
-| src/CityJourneyNFT.sol  | 100.00% (20/20)  | 100.00% (19/19)  | 100.00% (4/4)  | 100.00% (5/5)  |
+Mint the cities in `cities.json` (it must run from that directory, and it targets the deployed address on Arbitrum One):
 
+```bash
+cd tools/mint-cities
+PRIVATE_KEY=0x... go run .
+go test ./... -cover
+```
 
-(The deployment script is excluded from this table. It's a one-off tool, not tested via Foundry's suite; its correctness was verified by the successful live deployment.)
+## Tests
 
-### A note on hardcoded token IDs in tests
+| Suite | Tests | Covers |
+|---|---|---|
+| `test/CityJourneyNFT.t.sol` (Foundry) | 9 | mint and stored data, owner check, cap, transfer reverts, `Transfer` event, `tokenURI` |
+| `tools/mint-cities/main_test.go` (Go) | 2 | `loadCities` with a missing file, `buildAuth` with an invalid key |
 
-Some tests assert against literal `cityData(0)` / `cityData(1)` instead of computing the expected token ID dynamically. This is intentional: these tests exist specifically to confirm sequential minting starts at 0 and increments correctly. A dynamic calculation would silently adapt to a future change in that behavior instead of catching it, which is the opposite of what the test is for.
+Contract coverage with `forge coverage --no-match-coverage "(test|script)"`:
 
-## Metadata & minting
+| File | % Lines | % Statements | % Branches | % Funcs |
+|---|---|---|---|---|
+| src/CityJourneyNFT.sol | 100.00% (20/20) | 100.00% (19/19) | 100.00% (4/4) | 100.00% (5/5) |
 
-- Images and metadata JSON hosted on IPFS via Pinata
-- A small Go script (`tools/mint-cities/`) reads city data from a JSON file and mints each token sequentially via `go-ethereum`, using auto-generated bindings from `abigen`
+Go coverage with `go test ./... -cover`: 1.2% of statements. Most of `main.go` needs an RPC node and the abigen bindings count toward the total.
 
-## Notes
+## License
 
-- `totalSupply` is fixed at deploy time, with no owner function to increase it, and tokens are soulbound (non-transferable). Both are deliberate, not just technical defaults: this collection is a fixed set of ten chapters, from where the story started to where it stands right now. Some chapters already lived, the last one just beginning. A future chapter means a new collection, not an expansion of this one.
-
-- City data (name, coordinates, date range) lives on-chain in a `CityData` struct per token, verifiable and independent of any third-party service staying available. The descriptive phrase for each city stays in IPFS metadata instead: it's narrative content with no need for the stronger guarantees on-chain storage provides, and keeping it off-chain avoids the gas cost of storing long strings. A Go-based event indexer reads city data directly from the contract rather than from IPFS. See [Related](#related) below.
-
-- The minting script manages transaction nonces manually, fetching the starting nonce once and incrementing it locally between calls, rather than relying on automatic nonce resolution per transaction. Sequential mints submitted in quick succession triggered "nonce too low" errors when the nonce was recalculated on every call, since Arbitrum confirms fast enough for consecutive lookups to race each other.
-
-## Related
-
-[city-journey-indexer](https://github.com/m15flores/city-journey-indexer). Go backend that reads city data directly from this contract via `go-ethereum` and exposes it through a small HTTP API.
+[MIT](LICENSE)
