@@ -2,8 +2,6 @@
 
 A soulbound ERC-721 collection with one token for each city I have lived in. The city name, coordinates and dates are stored on-chain, and a small Go tool mints the tokens from a JSON file. It is deployed on Arbitrum One and all 10 tokens are minted.
 
-Stack: Solidity 0.8.34, Foundry, OpenZeppelin Contracts 5.7.0, Go 1.25 with go-ethereum v1.17.6.
-
 **Not audited.**
 
 ## Deployment
