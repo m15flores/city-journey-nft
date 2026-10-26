@@ -33,3 +33,30 @@ jobs:
 
       - name: Run Forge tests
         run: forge test -vvv
+
+  go:
+    name: mint-cities (Go)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: tools/mint-cities
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/mint-cities/go.mod
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run go build
+        run: go build ./...
+
+      - name: Run go test
+        run: go test ./...
